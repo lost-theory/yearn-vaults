@@ -26,7 +26,7 @@ def affiliate(management):
 
 @pytest.fixture
 def affiliate_token(token, affiliate, registry, AffiliateToken):
-    # Affliate Wrapper
+    # Affiliate Wrapper
     yield affiliate.deploy(
         AffiliateToken,
         token,
