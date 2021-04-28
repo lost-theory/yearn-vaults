@@ -6,6 +6,7 @@ import yaml
 
 from eth_account import Account
 from eth_account.messages import encode_structured_data
+from eip712.messages import EIP712Message
 
 from brownie import compile_source, Token, Vault, web3, chain
 
@@ -88,6 +89,19 @@ def chain_id():
     return 1 if web3.clientVersion.startswith("EthereumJS") else chain.id
 
 
+class Permit(EIP712Message):
+    _name_: "string" = "Yearn Vault"
+    _version_: "string"
+    _chainId_: "uint256"
+    _verifyingContract_: "address"
+
+    owner: "address"
+    spender: "address"
+    value: "uint256"
+    nonce: "uint256"
+    deadline: "uint256"
+
+
 @pytest.fixture
 def sign_token_permit():
     def sign_token_permit(
@@ -102,39 +116,20 @@ def sign_token_permit():
             nonce = override_nonce
         else:
             nonce = token.nonces(owner.address)
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Permit": [
-                    {"name": "owner", "type": "address"},
-                    {"name": "spender", "type": "address"},
-                    {"name": "value", "type": "uint256"},
-                    {"name": "nonce", "type": "uint256"},
-                    {"name": "deadline", "type": "uint256"},
-                ],
-            },
-            "domain": {
-                "name": token.name(),
-                "version": "1",
-                "chainId": chain_id(),
-                "verifyingContract": str(token),
-            },
-            "primaryType": "Permit",
-            "message": {
-                "owner": owner.address,
-                "spender": spender,
-                "value": allowance,
-                "nonce": nonce,
-                "deadline": deadline,
-            },
-        }
-        permit = encode_structured_data(data)
-        return owner.sign_message(permit)
+
+        permit = Permit(
+            _name_=token.name(),
+            _version_="1",
+            _chainId_=chain_id(),
+            _verifyingContract_=str(token),
+            owner=owner.address,
+            spender=spender,
+            value=allowance,
+            nonce=nonce,
+            deadline=deadline,
+        )
+        encoded_permit = encode_structured_data(permit.body_data)
+        return owner.sign_message(encoded_permit)
 
     return sign_token_permit
 
@@ -155,39 +150,19 @@ def sign_vault_permit():
             nonce = override_nonce
         else:
             nonce = vault.nonces(owner.address)
-        data = {
-            "types": {
-                "EIP712Domain": [
-                    {"name": "name", "type": "string"},
-                    {"name": "version", "type": "string"},
-                    {"name": "chainId", "type": "uint256"},
-                    {"name": "verifyingContract", "type": "address"},
-                ],
-                "Permit": [
-                    {"name": "owner", "type": "address"},
-                    {"name": "spender", "type": "address"},
-                    {"name": "value", "type": "uint256"},
-                    {"name": "nonce", "type": "uint256"},
-                    {"name": "deadline", "type": "uint256"},
-                ],
-            },
-            "domain": {
-                "name": name,
-                "version": version,
-                "chainId": chain_id(),
-                "verifyingContract": str(vault),
-            },
-            "primaryType": "Permit",
-            "message": {
-                "owner": owner.address,
-                "spender": spender,
-                "value": allowance,
-                "nonce": nonce,
-                "deadline": deadline,
-            },
-        }
-        permit = encode_structured_data(data)
-        return owner.sign_message(permit).signature
+        permit = Permit(
+            _name_=name,
+            _version_=vault.apiVersion(),
+            _chainId_=chain_id(),
+            _verifyingContract_=str(vault),
+            owner=owner.address,
+            spender=spender,
+            value=allowance,
+            nonce=nonce,
+            deadline=deadline,
+        )
+        encoded_permit = encode_structured_data(permit.body_data)
+        return owner.sign_message(encoded_permit).signature
 
     return sign_vault_permit
 
